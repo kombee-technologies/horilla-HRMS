@@ -279,21 +279,7 @@ class RecruitmentCreationForm(BaseModelForm):
     Form for Recruitment model
     """
 
-    # survey_templates = forms.ModelMultipleChoiceField(
-    #     queryset=SurveyTemplate.objects.all(),
-    #     widget=forms.SelectMultiple(),
-    #     label=_("Survey Templates"),
-    #     required=False,
-    # )
-    # linkedin_account_id = forms.ModelChoiceField(
-    #     queryset=LinkedInAccount.objects.filter(is_active=True)
-    #     label=_('')
-    # )
     class Meta:
-        """
-        Meta class to add the additional info
-        """
-
         model = Recruitment
         fields = "__all__"
         exclude = ["is_active", "linkedin_post_id"]
@@ -302,17 +288,13 @@ class RecruitmentCreationForm(BaseModelForm):
         }
 
     def as_p(self, *args, **kwargs):
-        """
-        Render the form fields as HTML table rows with Bootstrap styling.
-        """
-        context = {"form": self}
-        table_html = render_to_string("horilla_form.html", context)
-        return table_html
+        return render_to_string("horilla_form.html", {"form": self})
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         reload_queryset(self.fields)
+
         if not self.instance.pk:
             self.fields["recruitment_managers"] = HorillaMultiSelectField(
                 queryset=Employee.objects.filter(is_active=True),
@@ -323,14 +305,11 @@ class RecruitmentCreationForm(BaseModelForm):
                     filter_template_path="employee_filters.html",
                     required=True,
                 ),
-                label=f"{self._meta.model()._meta.get_field('recruitment_managers').verbose_name}",
+                label=self._meta.model._meta.get_field(
+                    "recruitment_managers"
+                ).verbose_name,
             )
 
-        skill_choices = [("", _("---Choose Skills---"))] + list(
-            self.fields["skills"].queryset.values_list("id", "title")
-        )
-        self.fields["skills"].choices = skill_choices
-        self.fields["skills"].choices += [("create", _("Create new skill "))]
         self.fields["linkedin_account_id"].queryset = LinkedInAccount.objects.filter(
             is_active=True
         )
@@ -338,37 +317,35 @@ class RecruitmentCreationForm(BaseModelForm):
             {"onchange": "toggleLinkedIn()"}
         )
 
-    # def create_option(self, *args,**kwargs):
-    #     option = super().create_option(*args,**kwargs)
-
-    #     if option.get('value') == "create":
-    #         option['attrs']['class'] = 'text-danger'
-
-    #     return option
+    # 🚨 DO NOT USE clean_open_positions
+    # BaseModelForm breaks it
 
     def clean(self):
-        if isinstance(self.fields["recruitment_managers"], HorillaMultiSelectField):
-            ids = self.data.getlist("recruitment_managers")
-            if ids:
-                self.errors.pop("recruitment_managers", None)
-        open_positions = self.cleaned_data.get("open_positions")
-        is_published = self.cleaned_data.get("is_published")
-        if is_published and not open_positions:
-            raise forms.ValidationError(
-                _("Job position is required if the recruitment is publishing.")
+        cleaned_data = super().clean()
+
+        # 🔥 FORCE REMOVE TOP ERROR
+        self._errors.pop(NON_FIELD_ERRORS, None)
+
+        is_published = cleaned_data.get("is_published")
+        open_positions = cleaned_data.get("open_positions")
+
+        if is_published and (not open_positions or open_positions.count() == 0):
+            self.add_error(
+                "open_positions",
+                _("Job position is required if the recruitment is publishing."),
             )
+
         if (
-            self.cleaned_data.get("publish_in_linkedin")
-            and not self.cleaned_data["linkedin_account_id"]
+            cleaned_data.get("publish_in_linkedin")
+            and not cleaned_data.get("linkedin_account_id")
         ):
-            raise forms.ValidationError(
-                {
-                    "linkedin_account_id": _(
-                        "LinkedIn account is required for publishing."
-                    )
-                }
+            self.add_error(
+                "linkedin_account_id",
+                _("LinkedIn account is required for publishing."),
             )
-        super().clean()
+
+        return cleaned_data
+
 
 
 class StageCreationForm(BaseModelForm):
