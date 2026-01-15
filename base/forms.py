@@ -2583,6 +2583,76 @@ class PassWordResetForm(forms.Form):
             )
 
 
+def validate_zip_code(value):
+    """
+    Validates zip codes for various international formats.
+    
+    Supports formats from:
+    - United States (12345, 12345-6789)
+    - Canada (A1A1A1, K1A0A6)
+    - United Kingdom (SW1A1AA, M11AA, B338TH)
+    - Germany, France, Spain, Italy (12345, 01234)
+    - India (394210, 110001)
+    - Australia, South Africa (1234, 2000)
+    - Japan (123-4567, 1234567)
+    - Brazil (12345-678, 12345678)
+    - Netherlands (1234AB, 2000AA)
+    - Portugal (1234-567, 1234567)
+    - Poland (12-345, 12345)
+    - Other formats (3-10 digits, alphanumeric with optional hyphen)
+    """
+    import re
+    
+    if not value:
+        raise ValidationError(_("Zip code cannot be empty."))
+    
+    # Strip whitespace
+    value = str(value).strip()
+    
+    # Check length (3-10 characters)
+    if len(value) < 3 or len(value) > 10:
+        raise ValidationError(_("Zip code must be between 3 and 10 characters."))
+    
+    # Check for invalid characters (only allow alphanumeric and single hyphen)
+    if not re.match(r'^[A-Za-z0-9-]+$', value):
+        raise ValidationError(_("Zip code can only contain letters, numbers, and hyphens."))
+    
+    # Check for multiple consecutive hyphens
+    if '--' in value:
+        raise ValidationError(_("Zip code cannot contain multiple consecutive hyphens."))
+    
+    # Check hyphen position (not at start or end)
+    if value.startswith('-') or value.endswith('-'):
+        raise ValidationError(_("Zip code cannot start or end with a hyphen."))
+    
+    # Check for too many hyphens (max 1 for most formats)
+    if value.count('-') > 1:
+        raise ValidationError(_("Zip code cannot contain more than 1 hyphen."))
+    
+    # Reject patterns that are clearly invalid
+    # All same character (for lengths > 5)
+    if len(value) > 5 and len(set(value.replace('-', ''))) == 1:
+        raise ValidationError(_("Zip code cannot be all the same character."))
+    
+    # Sequential numbers (for lengths >= 9 - be more lenient)
+    if len(value) >= 9 and value.isdigit():
+        digits = [int(d) for d in value]
+        # Check for sequential numbers (including wrap-around like 9,0,1,2...)
+        is_sequential = all(digits[i] == (digits[i-1] + 1) % 10 for i in range(1, len(digits)))
+        if is_sequential:
+            raise ValidationError(_("Zip code cannot be sequential numbers."))
+    
+    # All zeros (for lengths > 5)
+    if len(value) > 5 and value.replace('-', '') == '0' * len(value.replace('-', '')):
+        raise ValidationError(_("Zip code cannot be all zeros."))
+    
+    # All letters (for lengths > 6 - some countries allow this but be conservative)
+    if len(value) > 6 and value.isalpha():
+        raise ValidationError(_("Zip code cannot be all letters for lengths greater than 6."))
+    
+    return value
+
+
 def validate_ip_or_cidr(value):
     try:
         ipaddress.ip_address(value)

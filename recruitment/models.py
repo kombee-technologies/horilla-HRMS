@@ -96,7 +96,7 @@ class SurveyTemplate(HorillaModel):
 
 
 class Skill(HorillaModel):
-    title = models.CharField(max_length=100)
+    title = models.CharField(max_length=100, unique=True)
 
     def __str__(self):
         return self.title
@@ -673,9 +673,42 @@ class RejectReason(HorillaModel):
     def __str__(self) -> str:
         return self.title
 
+    def clean(self):
+        """
+        Model-level validation to prevent duplicate titles
+        """
+        super().clean()
+        if self.title:
+            # Build the query to check for duplicates
+            queryset = RejectReason.objects.filter(title__iexact=self.title.strip())
+            
+            # Filter by company if available
+            if self.company_id:
+                queryset = queryset.filter(company_id=self.company_id)
+            
+            # Exclude current instance if editing
+            if self.pk:
+                queryset = queryset.exclude(pk=self.pk)
+            
+            if queryset.exists():
+                raise ValidationError({'title': _("A reject reason with this title already exists.")})
+
+    def save(self, *args, **kwargs):
+        """
+        Override save to call full_clean for validation
+        """
+        self.full_clean()
+        super().save(*args, **kwargs)
+
     class Meta:
         verbose_name = _("Reject Reason")
         verbose_name_plural = _("Reject Reasons")
+        constraints = [
+            models.UniqueConstraint(
+                fields=['title', 'company_id'],
+                name='unique_reject_reason_per_company'
+            )
+        ]
 
 
 class RejectedCandidate(HorillaModel):

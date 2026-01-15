@@ -29,6 +29,7 @@ from django.contrib import messages
 from django.contrib.auth.models import User
 from django.core import serializers
 from django.core.cache import cache as CACHE
+from django.core.exceptions import ValidationError
 from django.core.mail import EmailMessage
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
@@ -2817,9 +2818,24 @@ def create_reject_reason(request):
     if request.method == "POST":
         form = RejectReasonForm(request.POST, instance=instance)
         if form.is_valid():
-            form.save()
-            messages.success(request, "Reject reason saved")
-            return HttpResponse("<script>window.location.reload()</script>")
+            try:
+                form.save()
+                messages.success(request, "Reject reason saved successfully")
+                return HttpResponse("<script>window.location.reload()</script>")
+            except ValidationError as e:
+                # Handle model-level validation errors
+                if hasattr(e, 'message_dict'):
+                    for field, errors in e.message_dict.items():
+                        for error in errors:
+                            form.add_error(field, error)
+                else:
+                    form.add_error(None, str(e))
+            except Exception as e:
+                # Handle database constraint errors
+                if 'unique_reject_reason_per_company' in str(e):
+                    form.add_error('title', 'A reject reason with this title already exists.')
+                else:
+                    form.add_error(None, 'An error occurred while saving the reject reason.')
     return render(request, "settings/reject_reason_form.html", {"form": form})
 
 
@@ -3048,29 +3064,40 @@ def create_skills(request):
     if request.method == "POST":
         form = SkillsForm(request.POST, instance=instance)
         if form.is_valid():
-            form.save()
-            messages.success(request, "Skill created successfully")
+            try:
+                form.save()
+                if instance:
+                    messages.success(request, "Skill updated successfully")
+                else:
+                    messages.success(request, "Skill created successfully")
 
-            if request.GET.get("dynamic") == "True":
-                from django.urls import reverse
+                if request.GET.get("dynamic") == "True":
+                    from django.urls import reverse
 
-                url = reverse("recruitment-create")
-                instance = Skill.objects.all().last()
-                mutable_get = request.GET.copy()
-                skills = mutable_get.getlist("skills")
-                skills.remove("create")
-                skills.append(str(instance.id))
-                mutable_get["skills"] = skills[-1]
-                skills.pop()
-                data = mutable_get.urlencode()
-                try:
-                    for item in skills:
-                        data += f"&skills={item}"
-                except:
-                    pass
-                return redirect(f"{url}?{data}")
+                    url = reverse("recruitment-create")
+                    instance = Skill.objects.all().last()
+                    mutable_get = request.GET.copy()
+                    skills = mutable_get.getlist("skills")
+                    skills.remove("create")
+                    skills.append(str(instance.id))
+                    mutable_get["skills"] = skills[-1]
+                    skills.pop()
+                    data = mutable_get.urlencode()
+                    try:
+                        for item in skills:
+                            data += f"&skills={item}"
+                    except:
+                        pass
+                    return redirect(f"{url}?{data}")
 
-            return HttpResponse("<script>window.location.reload()</script>")
+                return HttpResponse("<script>window.location.reload()</script>")
+            except Exception as e:
+                messages.error(request, f"Error saving skill: {str(e)}")
+        else:
+            # Form validation failed, errors will be displayed in the template
+            if 'title' in form.errors:
+                for error in form.errors['title']:
+                    messages.error(request, error)
 
     context = {
         "form": form,

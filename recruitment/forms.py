@@ -1155,6 +1155,35 @@ class RejectReasonForm(ModelForm):
         fields = "__all__"
         exclude = ["is_active"]
 
+    def clean_title(self):
+        """
+        Validate that the reject reason title is unique within the company
+        """
+        title = self.cleaned_data.get('title')
+        if title:
+            # Get the current user's company
+            company = None
+            if hasattr(_thread_locals, 'user') and _thread_locals.user:
+                company = getattr(_thread_locals.user.employee_get, 'employee_work_info', None)
+                if company:
+                    company = getattr(company, 'company_id', None)
+            
+            # Build the query to check for duplicates
+            queryset = RejectReason.objects.filter(title__iexact=title.strip())
+            
+            # Filter by company if available
+            if company:
+                queryset = queryset.filter(company_id=company)
+            
+            # Exclude current instance if editing
+            if self.instance and self.instance.pk:
+                queryset = queryset.exclude(pk=self.instance.pk)
+            
+            if queryset.exists():
+                raise ValidationError(_("A reject reason with this title already exists."))
+        
+        return title.strip() if title else title
+
     def as_p(self, *args, **kwargs):
         """
         Render the form fields as HTML table rows with Bootstrap styling.
@@ -1262,6 +1291,22 @@ class SkillsForm(ModelForm):
     class Meta:
         model = Skill
         fields = ["title"]
+
+    def clean_title(self):
+        title = self.cleaned_data.get('title')
+        if title:
+            # Capitalize the title to match the model's save method
+            title = title.capitalize()
+            
+            # Check for duplicates, excluding the current instance if updating
+            existing_skill = Skill.objects.filter(title__iexact=title)
+            if self.instance and self.instance.pk:
+                existing_skill = existing_skill.exclude(pk=self.instance.pk)
+            
+            if existing_skill.exists():
+                raise ValidationError(_("A skill with this title already exists."))
+        
+        return title
 
 
 class ResumeForm(ModelForm):

@@ -58,6 +58,7 @@ coverage.xml
 *.log
 local_settings.py
 TestDB_Horilla.sqlite3
+horilla.sqlite3
 db.sqlite3
 db.sqlite3-journal
 
@@ -152,3 +153,8 @@ whoosh_index/
 
 #PyCharm
 .idea/
+# Temporary fix documentation files
+REJECT_REASON_VALIDATION_FIX.md
+*_validation_fix.md
+check_existing_duplicates.py
+test_*_validation.py

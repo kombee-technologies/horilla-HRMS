@@ -1,5 +1,66 @@
+{% load i18n %}
+
 <form hx-post="{% url 'create-reject-reason' %}?instance_id={{form.instance.pk}}">
-    {{form.as_p}}
+    {% csrf_token %}
+    
+    <!-- Display non-field errors -->
+    {% if form.non_field_errors %}
+        <div class="alert alert-danger">
+            {{ form.non_field_errors }}
+        </div>
+    {% endif %}
+    
+    <!-- Title field -->
+    <div class="oh-input-group">
+        <label class="oh-label" for="{{ form.title.id_for_label }}">
+            {{ form.title.label }}{% if form.title.field.required %} <span class="text-danger">*</span>{% endif %}
+        </label>
+        {{ form.title }}
+        {% if form.title.errors %}
+            <div class="text-danger small mt-1">
+                {{ form.title.errors }}
+            </div>
+        {% endif %}
+    </div>
+    
+    <!-- Description field -->
+    <div class="oh-input-group">
+        <label class="oh-label" for="{{ form.description.id_for_label }}">
+            {{ form.description.label }}
+        </label>
+        {{ form.description }}
+        {% if form.description.errors %}
+            <div class="text-danger small mt-1">
+                {{ form.description.errors }}
+            </div>
+        {% endif %}
+    </div>
+    
+    <!-- Company field (if present) -->
+    {% if form.company_id %}
+        <div class="oh-input-group">
+            <label class="oh-label" for="{{ form.company_id.id_for_label }}">
+                {{ form.company_id.label }}
+            </label>
+            {{ form.company_id }}
+            {% if form.company_id.errors %}
+                <div class="text-danger small mt-1">
+                    {{ form.company_id.errors }}
+                </div>
+            {% endif %}
+        </div>
+    {% endif %}
+    
+    <!-- Submit button -->
+    <div class="oh-input-group mt-3">
+        <button type="submit" class="oh-btn oh-btn--primary">
+            {% if form.instance.pk %}
+                {% trans 'Update' %}
+            {% else %}
+                {% trans 'Create' %}
+            {% endif %}
+        </button>
+    </div>
 </form>
 
 <script>
