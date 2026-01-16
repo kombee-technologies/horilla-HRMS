@@ -1,0 +1,271 @@
+
+# Direct-to-Cloud Upload System
+
+This document explains how to use and configure the **Direct-to-Cloud Upload System**, which allows browsers to upload files **directly to cloud storage** (AWS S3, Google Cloud Storage, or Azure Blob Storage), bypassing the Django backend application servers.
+
+The system automatically **falls back to local storage** when no cloud provider is configured.
+
+---
+
+## 1. Overview
+
+Traditional file uploads send data through the backend server, increasing load, memory usage, and upload limits.
+This system improves scalability and reliability by enabling **direct browser-to-cloud uploads**.
+
+### Key Benefits
+
+* No file data passes through Django servers
+* Faster uploads and better user experience
+* Reduced server CPU, memory, and bandwidth usage
+* Supports multiple cloud providers
+* Automatic fallback to local storage
+
+---
+
+## 2. Upload Flow (High Level)
+
+```
+Browser
+  ↓
+Initialize Upload (Backend – metadata only)
+  ↓
+Signed Upload URL
+  ↓
+Browser → Cloud Storage (Direct Upload)
+  ↓
+Complete Upload (Backend)
+```
+
+---
+
+## 3. API Endpoints
+
+### 3.1 Initialize Upload
+
+Creates a signed upload URL and initializes an upload transaction.
+
+**Endpoint**
+
+```
+POST /api/v1/uploads/init/
+```
+
+**Request Body**
+
+```json
+{
+  "filename": "receipt.pdf",
+  "file_size": 1024,
+  "content_type": "application/pdf"
+}
+```
+
+**Response**
+
+```json
+{
+  "upload_url": "https://bucket.s3.amazonaws.com/uploads/uuid/receipt.pdf?signature=...",
+  "method": "PUT",
+  "headers": {
+    "Content-Type": "application/pdf"
+  },
+  "transaction_id": "uuid-string"
+}
+```
+
+**Notes**
+
+* No file data is sent to the backend
+* Backend validates user, file type, and size
+* Upload URL is short-lived and secure
+
+---
+
+### 3.2 Perform Upload (Frontend)
+
+The frontend uploads the file directly to cloud storage using the signed URL.
+
+**Example (JavaScript)**
+
+```javascript
+await fetch(response.upload_url, {
+  method: response.method,
+  headers: response.headers,
+  body: fileObject
+});
+```
+
+**Important**
+
+* Upload goes **directly from browser to cloud**
+* Backend servers are not involved in file transfer
+
+---
+
+### 3.3 Complete Upload
+
+Notifies the backend that the upload has completed successfully.
+
+**Endpoint**
+
+```
+POST /api/v1/uploads/complete/
+```
+
+**Request Body**
+
+```json
+{
+  "transaction_id": "uuid-string"
+}
+```
+
+**Response**
+
+```json
+{
+  "status": "success",
+  "file_url": "uploads/uuid/receipt.pdf"
+}
+```
+
+**What Happens Internally**
+
+* Backend verifies the file exists in storage
+* Upload is marked as completed
+* File reference is saved in the database
+
+---
+
+## 4. Storage Configuration
+
+Storage backend is selected via environment variables.
+
+### 4.1 AWS S3
+
+```env
+STORAGE_BACKEND=aws
+AWS_ACCESS_KEY_ID=your_access_key
+AWS_SECRET_ACCESS_KEY=your_secret_key
+AWS_STORAGE_BUCKET_NAME=your-bucket-name
+AWS_REGION=ap-south-1
+```
+
+**Notes**
+
+* Supports direct browser uploads
+* Recommended for production use
+* Lowest operational risk
+
+---
+
+### 4.2 Google Cloud Storage (GCS)
+
+```env
+STORAGE_BACKEND=gcs
+GS_BUCKET_NAME=your-bucket-name
+GS_CREDENTIALS=/path/to/service-account.json
+```
+
+**Notes**
+
+* Requires service account credentials
+* Direct uploads supported via signed URLs
+
+---
+
+### 4.3 Azure Blob Storage
+
+```env
+STORAGE_BACKEND=azure
+AZURE_ACCOUNT_NAME=your-account-name
+AZURE_ACCOUNT_KEY=your-account-key
+AZURE_CONTAINER=your-container-name
+```
+
+**Notes**
+
+* Uses SAS tokens for direct upload
+* Ensure container permissions are private
+
+---
+
+### 4.4 Local Storage (Default / Fallback)
+
+```env
+STORAGE_BACKEND=local
+```
+
+**Behavior**
+
+* Files are stored on the application server
+* Used automatically if no cloud provider is configured
+* Not recommended for large files or production scale
+
+---
+
+## 5. Security Considerations
+
+* Signed upload URLs are **short-lived**
+* Backend validates file metadata before issuing upload URLs
+* Buckets/containers should **not be publicly writable**
+* Access keys must be stored securely (never committed)
+
+---
+
+## 6. Error Handling
+
+Common failure scenarios:
+
+* Invalid file type or size → rejected at init step
+* Expired signed URL → re-initialize upload
+* Incomplete upload → transaction remains pending
+
+Backend should periodically clean up:
+
+* Expired upload transactions
+* Orphaned files (if upload never completed)
+
+---
+
+## 7. When to Use This System
+
+Recommended for:
+
+* File uploads > 5MB
+* High-traffic systems
+* Cloud-hosted deployments
+* Systems where backend scalability matters
+
+Not required for:
+
+* Very small files
+* Fully local/on-prem deployments with no cloud storage
+
+---
+
+## 8. Summary
+
+* This system enables **scalable, cloud-native file uploads**
+* Backend is used only for **authorization and bookkeeping**
+* Cloud providers handle actual file storage and transfer
+* Configuration-only setup (no frontend SDK lock-in)
+
+---
+
+## 9. Support
+
+If you need help with:
+
+* Adding a new cloud provider
+* File migration
+* Security hardening
+* Monitoring and cleanup jobs
+
+Please contact the platform or backend team.
+
+---
+
+**End of Document**
+
+---
